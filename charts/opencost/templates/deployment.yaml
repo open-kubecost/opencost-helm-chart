@@ -1,8 +1,13 @@
+{{- if not (hasKey .Values.opencost.exporter.extraEnv "KUBECOST_NAMESPACE") }}
+{{- $_ := set .Values.opencost.exporter.extraEnv "KUBECOST_NAMESPACE" .Release.Namespace }}
+{{- end }}
+
 {{- include  "isPrometheusConfigValid" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "opencost.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels: {{- include "opencost.labels" . | nindent 4 }}
   {{- with .Values.annotations }}
   annotations: {{- toYaml . | nindent 4 }}
@@ -134,12 +139,17 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          {{- if or .Values.opencost.exporter.persistence.enabled .Values.opencost.exporter.extraVolumeMounts }}
+          {{- if or .Values.opencost.exporter.persistence.enabled .Values.configs .Values.opencost.exporter.extraVolumeMounts }}
           volumeMounts:
             {{- if .Values.opencost.exporter.persistence.enabled }}
             - mountPath: /mnt/export
               name: opencost-export
               readOnly: false
+            {{- end }}
+            {{- if .Values.configs }}
+            - name: metrics-config
+              mountPath: "/var/configs"
+              readOnly: true
             {{- end }}
             {{- with .Values.opencost.exporter.extraVolumeMounts }}
               {{- toYaml . | nindent 12 }}
@@ -178,12 +188,17 @@ spec:
           volumeMounts: {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- end }}
-      {{- if or .Values.opencost.exporter.persistence.enabled .Values.extraVolumes }}
+      {{- if or .Values.opencost.exporter.persistence.enabled .Values.configs .Values.extraVolumes }}
       volumes:
         {{- if .Values.opencost.exporter.persistence.enabled }}
         - name: opencost-export
           persistentVolumeClaim:
             claimName: {{ include "opencost.fullname" . }}-pvc
+        {{- end }}
+        {{- if .Values.configs }}
+        - name: metrics-config
+          configMap:
+            name: {{ include "opencost.fullname" . }}-metrics-config
         {{- end }}
         {{- with .Values.extraVolumes }}
           {{- toYaml . | nindent 8 }}
